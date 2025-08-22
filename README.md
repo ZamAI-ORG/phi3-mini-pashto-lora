@@ -1,30 +1,41 @@
 # ZamAI Phi-3 Mini Pashto
 
-ZamAI Phi-3 Mini Pashto is a Pashto–focused instruction-tuned variant of the base model `microsoft/Phi-3-mini-4k-instruct`.  
-This repository contains the fine-tuning scripts, configuration, inference utilities, evaluation script, Docker environment, and CI workflow to (a) reproduce continued instruction tuning on Pashto data and (b) serve / evaluate the resulting model.
+ZamAI Phi-3 Mini Pashto is a Pashto–focused instruction-tuned variant of the base model `microsoft/Phi-3-mini-4k-instruct`.
 
-> NOTE: The actual fine‑tuned weights are not stored in this Git repository (recommended best practice). After training, you can push them to the Hugging Face Hub under (example) `tasal9/ZamAI-Phi-3-Mini-Pashto` and reference them here.
+This repository now includes:
+- LoRA / QLoRA fine-tuning scripts
+- DeepSpeed + Accelerate example configs
+- Quantization & comparative benchmarking utilities
+- Extended evaluation (BLEU / chrF / instruction metrics placeholder)
+- Merge script (LoRA → full weights)
+- Safety / content filtering stub
+- Hugging Face Space demo scaffold (uses: `tasal9/ZamZeerak-Phi3-Pashto`)
+- Pre-commit hooks, ruff config, tests & CI
+
+> NOTE: Fine‑tuned weights are not in Git. Publish to HF Hub (`tasal9/ZamAI-Phi-3-Mini-Pashto`) after training.
 
 ---
 
 ## 1. Features
 
 - Base: `microsoft/Phi-3-mini-4k-instruct`
-- Parameter-efficient fine-tuning via LoRA (PEFT)
-- Optional 4-bit QLoRA (bitsandbytes) for low VRAM environments
-- Gradient accumulation & mixed precision (bfloat16)
-- Simple YAML-driven configuration
-- Pashto text normalization helper
-- Inference script with:
-  - Standard generation
-  - Quantized loading (8-bit / 4-bit)
-- Evaluation script (perplexity)
-- Dockerfile for reproducible environment
-- GitHub Actions CI (ruff lint)
+- LoRA / QLoRA (4-bit NF4) with parameter-efficient fine-tuning
+- DeepSpeed Zero-2 config template for larger effective batch sizes
+- Evaluation:
+  - Perplexity
+  - Translation-style BLEU/chrF (for tasks framed as translation or normalization)
+  - Instruction metrics placeholder (extend in `evaluation/metrics.py`)
+- Comparison utility for different quantization loading modes
+- Merge script to apply LoRA deltas to base and optionally save merged weights
+- Export stubs for AWQ / GGUF (informational; may need adaptation for Phi-3 tooling maturity)
+- Safety filter hook
+- HF Space (Gradio) app scaffold: `hf_space/app.py` referencing model `tasal9/ZamZeerak-Phi3-Pashto`
+- CI: lint + tests (pytest)
+- Pre-commit: ruff, end-of-file-fixer, trailing whitespace cleaner
 
 ---
 
-## 2. Repository Layout
+## 2. Updated Repository Layout
 
 ```
 .
@@ -33,12 +44,45 @@ This repository contains the fine-tuning scripts, configuration, inference utili
 ├── evaluate.py
 ├── finetune_config.yaml
 ├── requirements.txt
+├── requirements-dev.txt
+├── pyproject.toml
 ├── Dockerfile
 ├── scripts/
-│   └── run_finetune.sh
+│   ├── run_finetune.sh
+│   ├── compare_quantization.py
+│   ├── merge_lora.py
+│   ├── export_awq.py
+│   ├── export_gguf.py
+├── evaluation/
+│   ├── metrics.py
+│   ├── run_eval_translation.py
+│   ├── run_eval_instruction.py
+├── deepspeed/
+│   └── ds_config_zero2.json
+├── accelerate_config.yaml
+├── safety/
+│   └── filter.py
+├── hf_space/
+│   ├── app.py
+│   └── requirements.txt
 ├── data/
-│   └── .gitkeep
-├── .github/workflows/ci.yml
+│   ├── .gitkeep
+│   └─��� (your data files)
+├── tests/
+│   ├── test_clean_pashto.py
+│   └── test_prompt_template.py
+├── .github/
+│   ├── workflows/
+│   │   ├── ci.yml
+│   │   └── tests.yml
+│   ├── pull_request_template.md
+│   └── ISSUE_TEMPLATE/
+│       ├── bug_report.md
+│       ├── feature_request.md
+│       └── improvement_task.md
+├── MODEL_CARD_TEMPLATE.md
+├── DATASET_CARD_TEMPLATE.md
+├── .pre-commit-config.yaml
 ├── README.md
 ├── LICENSE
 └── .gitignore
@@ -46,219 +90,89 @@ This repository contains the fine-tuning scripts, configuration, inference utili
 
 ---
 
-## 3. Installation
+## 3. New Capabilities Overview
 
-```bash
-git clone https://github.com/tasal9/ZamAI-Phi-3-Mini-Pashto.git
-cd ZamAI-Phi-3-Mini-Pashto
-python -m venv .venv
-source .venv/bin/activate  # (Windows: .venv\Scripts\activate)
-pip install --upgrade pip
-pip install -r requirements.txt
-```
-
-If using CUDA 12+ and bitsandbytes wheels are missing, consult bitsandbytes docs.
-
----
-
-## 4. Preparing Pashto Dataset
-
-You need a JSONL dataset with instruction / input / output style, e.g:
-
-```
-{"instruction": "د پښتو 'سلام' انګلیسي ته وژباړه", "input": "", "output": "Hello"}
-{"instruction": "لاندې جمله ساده کړه", "input": "زه غواړم چې نن خپل کارونه په بریالیتوب بشپړ کړم.", "output": "زه غواړم نن خپل کارونه بشپړ کړم."}
-```
-
-Place dataset file at `data/pashto_instruct_train.jsonl` (or as configured in `finetune_config.yaml`).  
-Validation (optional) at `data/pashto_instruct_valid.jsonl`.
+| Area | File(s) | Description |
+|------|---------|-------------|
+| DeepSpeed | `deepspeed/ds_config_zero2.json` | Zero-2 config baseline |
+| Accelerate | `accelerate_config.yaml` | Example multi-GPU config |
+| Quantization Comparison | `scripts/compare_quantization.py` | Bench latencies & memory |
+| LoRA Merge | `scripts/merge_lora.py` | Merge adapter into base |
+| AWQ / GGUF Stubs | `scripts/export_awq.py`, `scripts/export_gguf.py` | Guides / placeholders |
+| Instruction Eval | `evaluation/run_eval_instruction.py` | Future: custom metrics |
+| Translation Eval | `evaluation/run_eval_translation.py` | BLEU/chrF via sacrebleu |
+| Metrics Utils | `evaluation/metrics.py` | Shared metrics logic |
+| Safety | `safety/filter.py` | Simple heuristic filter |
+| Space App | `hf_space/app.py` | Gradio UI (points to Space model) |
+| Testing | `tests/` + `tests.yml` | Basic unit tests |
+| Pre-commit | `.pre-commit-config.yaml` | Consistent formatting & lint |
+| Templates | Issue + PR + dataset/model cards | Project governance |
 
 ---
 
-## 5. Configuration
+## 4. Gradio Space
 
-Edit `finetune_config.yaml`:
-
-- `base_model_name`: HF base model (already set to Phi-3)
-- `lora_r`, `lora_alpha`, `lora_dropout`
-- `train_file`, `eval_file`
-- `use_4bit`: enable QLoRA memory optimizations
+The included `hf_space/app.py` assumes the deployed (or to-be-deployed) model on HF Space is `tasal9/ZamZeerak-Phi3-Pashto`. Adjust if needed.
 
 ---
 
-## 6. Running Fine-Tuning
+## 5. LoRA Merge Example
 
-Quick start:
-
-```bash
-bash scripts/run_finetune.sh
 ```
-
-Or manually:
-
-```bash
-python train_lora.py \
-  --config finetune_config.yaml \
-  --output_dir outputs/zamai-phi3-pashto \
-  --push_to_hub \
-  --hub_model_id tasal9/ZamAI-Phi-3-Mini-Pashto
+python scripts/merge_lora.py \
+  --base_model microsoft/Phi-3-mini-4k-instruct \
+  --lora_model outputs/zamai-phi3-pashto \
+  --output_dir merged_phi3_pashto
 ```
-
-(You must `huggingface-cli login` first.)
 
 ---
 
-## 7. Inference
+## 6. Quantization Comparison
 
-After weights are on HF Hub:
+Quick run:
 
-```bash
-python inference.py \
+```
+python scripts/compare_quantization.py \
+  --model_id microsoft/Phi-3-mini-4k-instruct \
+  --prompt "سلام نړۍ" \
+  --modes fp16 8bit 4bit
+```
+
+Outputs timing / memory summary.
+
+---
+
+## 7. Extended Evaluation – Translation-like
+
+```
+python evaluation/run_eval_translation.py \
   --model_id tasal9/ZamAI-Phi-3-Mini-Pashto \
-  --prompt "په ساده پښتو کې تشریح کړه: عصبي شبکه څه ده؟"
-```
-
-Sample output:
-
-```
-[ZamAI]: عصبي شبکه د کمپيوټر يو ماډل دی چې هڅه کوي د انسان د دماغ د زده کړې طريقه تقليد کړي ...
+  --file data/pashto_instruct_valid.jsonl \
+  --field output \
+  --reference_field output \
+  --source_field instruction
 ```
 
 ---
 
-## 8. Evaluation (Perplexity)
+## 8. Pre-commit
 
-Compute perplexity on a held-out file:
-
-```bash
-python evaluate.py \
-  --model_id tasal9/ZamAI-Phi-3-Mini-Pashto \
-  --eval_file data/pashto_instruct_valid.jsonl \
-  --config finetune_config.yaml
 ```
-
-Outputs average loss & perplexity.
-
----
-
-## 9. Docker Usage
-
-Build image:
-
-```bash
-docker build -t zamai-phi3 .
-```
-
-Run training (mount data & output):
-
-```bash
-docker run --gpus all -it \
-  -v $(pwd)/data:/app/data \
-  -v $(pwd)/outputs:/app/outputs \
-  zamai-phi3 \
-  python train_lora.py --config finetune_config.yaml --output_dir outputs/run1
-```
-
-Run inference:
-
-```bash
-docker run --gpus all -it zamai-phi3 \
-  python inference.py --model_id tasal9/ZamAI-Phi-3-Mini-Pashto --prompt "سلام"
+pip install -r requirements-dev.txt
+pre-commit install
 ```
 
 ---
 
-## 10. CI (GitHub Actions)
+## 9. Next Ideas (Post-Integration)
 
-A simple workflow (`.github/workflows/ci.yml`) runs `ruff` on pushes & PRs to `main` for basic linting.
-
----
-
-## 11. Example Training Hyperparameters (Baseline)
-
-| Setting | Value |
-|--------|-------|
-| LoRA rank (r) | 64 |
-| LoRA alpha | 16 |
-| LoRA dropout | 0.05 |
-| Max seq length | 2048 |
-| Per device batch | 1–2 (accumulation to reach effective 16) |
-| LR | 2e-4 |
-| Warmup ratio | 0.03 |
-| Epochs | 3–5 |
-| Weight decay | 0.0 |
-| Gradient clip | 1.0 |
-
-Adjust per GPU memory.
+- Add automatic Space deployment script
+- Add streaming inference server (FastAPI)
+- Integrate MT-Bench style eval harness
+- Add RLHF / DPO pipeline extension
 
 ---
 
-## 12. Pashto Tokenization Notes
+## 10. License & Responsibility
 
-Phi-3 uses a fast tokenizer; Pashto script may include diacritics. Optional normalization in the script can:
-- Remove zero-width characters
-- Normalize Arabic Yeh / Kaf variants
-
-Extend `clean_pashto_text` helper in `train_lora.py` for more rules if needed.
-
----
-
-## 13. Safety & Responsible Use
-
-This model may hallucinate or produce harmful content. It should NOT be used for:
-- Medical / legal advice
-- High-stakes decision making
-
-Add content filters or moderation where appropriate.
-
----
-
-## 14. Roadmap
-
-- [ ] Add DeepSpeed config
-- [ ] Add richer evaluation metrics (BLEU, chrF, custom instruction metrics)
-- [ ] Add dataset card
-- [ ] Release quantized GGUF / AWQ variants
-- [ ] Add unit tests for data pipeline
-
----
-
-## 15. Citation
-
-```
-@misc{ZamAI2025,
-  title  = {ZamAI Phi-3 Mini Pashto},
-  author = {tasal9},
-  year   = {2025},
-  note   = {Fine-tuned from microsoft/Phi-3-mini-4k-instruct},
-  url    = {https://huggingface.co/tasal9/ZamAI-Phi-3-Mini-Pashto}
-}
-```
-
----
-
-## 16. License
-
-Code: MIT (see LICENSE)  
-Model Weights: follow base model license + your added terms (please ensure compatibility).
-
----
-
-## 17. Quick Inference Snippet (Transformers)
-
-```python
-from transformers import AutoModelForCausalLM, AutoTokenizer
-
-model_id = "tasal9/ZamAI-Phi-3-Mini-Pashto"
-tok = AutoTokenizer.from_pretrained(model_id)
-model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto")
-
-prompt = "په پښتو کې د 'Artificial Intelligence' تشريح وکړه."
-inputs = tok(prompt, return_tensors="pt").to(model.device)
-out = model.generate(**inputs, max_new_tokens=256, temperature=0.7)
-print(tok.decode(out[0], skip_special_tokens=True))
-```
-
----
-
-Feel free to request enhancements or additions.
+Same licensing as before. Provide disclaimers for non-production / sensitive uses.
