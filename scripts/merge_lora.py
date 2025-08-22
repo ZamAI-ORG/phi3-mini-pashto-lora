@@ -1,8 +1,10 @@
 #!/usr/bin/env python
 import argparse
-from transformers import AutoTokenizer, AutoModelForCausalLM
+
+from huggingface_hub import login
 from peft import PeftModel
-from huggingface_hub import login, HfApi
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -39,6 +41,7 @@ def main():
         tokenizer.push_to_hub(args.hub_model_id)
 
     print("✅ Merge complete!")
+
 
 if __name__ == "__main__":
     main()
