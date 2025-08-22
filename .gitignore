@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.venv/
+env/
+venv/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Outputs / Training Artifacts
+outputs/
+checkpoints/
+wandb/
+logs/
+
+# Data
+data/*.jsonl
+data/*.parquet
+data/raw/
+!data/.gitkeep
+
+# Hugging Face
+*.lock
+
+# Cache
+.cache/
