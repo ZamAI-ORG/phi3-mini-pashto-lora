@@ -53,6 +53,8 @@ This repository now includes:
 │   ├── merge_lora.py
 │   ├── export_awq.py
 │   ├── export_gguf.py
+│   ├── download_pdf_books.py
+│   ├── download_afghan_books.sh
 ├── evaluation/
 │   ├── metrics.py
 │   ├── run_eval_translation.py
@@ -99,6 +101,7 @@ This repository now includes:
 | Quantization Comparison | `scripts/compare_quantization.py` | Bench latencies & memory |
 | LoRA Merge | `scripts/merge_lora.py` | Merge adapter into base |
 | AWQ / GGUF Stubs | `scripts/export_awq.py`, `scripts/export_gguf.py` | Guides / placeholders |
+| PDF Book Downloader | `scripts/download_pdf_books.py`, `scripts/download_afghan_books.sh` | Download PDFs from educational websites |
 | Instruction Eval | `evaluation/run_eval_instruction.py` | Future: custom metrics |
 | Translation Eval | `evaluation/run_eval_translation.py` | BLEU/chrF via sacrebleu |
 | Metrics Utils | `evaluation/metrics.py` | Shared metrics logic |
@@ -164,7 +167,48 @@ pre-commit install
 
 ---
 
-## 9. Next Ideas (Post-Integration)
+## 9. PDF Book Downloader
+
+The included script `scripts/download_pdf_books.py` can download PDF books from educational websites. It's specifically designed for the Afghan Ministry of Education website but can be adapted for other sources.
+
+### Usage
+
+```bash
+# Easy way: Use the convenience script for Afghan MOE
+./scripts/download_afghan_books.sh
+
+# Or specify custom output directory and delay
+./scripts/download_afghan_books.sh "my_books" 3.0
+
+# Manual way: Use the general script directly
+python scripts/download_pdf_books.py \
+  --url "https://moe.gov.af/index.php/ps/%D8%AF-%D9%86%D8%B5%D8%A7%D8%A8-%DA%A9%D8%AA%D8%A7%D8%A8%D9%88%D9%86%D9%87" \
+  --output-dir "afghan_books" \
+  --delay 2.0
+
+# Download with verbose logging
+python scripts/download_pdf_books.py \
+  --url "https://example.com/books" \
+  --output-dir "books" \
+  --verbose
+```
+
+### Features
+
+- Automatically finds and downloads all PDF links from a webpage
+- Handles network errors and retries gracefully
+- Progress bars for downloads
+- Respectful delays between requests
+- Comprehensive logging
+- Sanitizes filenames for safe storage
+
+### Legal Notice
+
+This script is intended for educational and research purposes only. Please ensure you have permission to download content from the target website and comply with the website's terms of service and copyright laws.
+
+---
+
+## 10. Next Ideas (Post-Integration)
 
 - Add automatic Space deployment script
 - Add streaming inference server (FastAPI)
@@ -173,6 +217,6 @@ pre-commit install
 
 ---
 
-## 10. License & Responsibility
+## 11. License & Responsibility
 
 Same licensing as before. Provide disclaimers for non-production / sensitive uses.

@@ -26,3 +26,7 @@ data/raw/
 
 # Cache
 .cache/
+
+# PDF Downloader
+pdf_download.log
+books/
