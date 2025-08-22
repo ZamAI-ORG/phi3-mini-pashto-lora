@@ -1,0 +1,7 @@
+compute_environment: LOCAL_MACHINE
+distributed_type: MULTI_GPU
+num_processes: 2
+mixed_precision: fp16
+dynamo_backend: no
+downcast_bf16: 'no'
+use_cpu: false
