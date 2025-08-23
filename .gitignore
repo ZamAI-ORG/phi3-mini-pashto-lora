@@ -30,3 +30,7 @@ data/raw/
 # PDF Downloader
 pdf_download.log
 books/
+
+
+#Ignore insiders AI rules
+.github/instructions/codacy.instructions.md
