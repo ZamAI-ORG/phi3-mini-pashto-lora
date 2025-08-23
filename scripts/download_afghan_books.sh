@@ -8,6 +8,11 @@
 
 set -euo pipefail
 
+# Directory of this script (so we can reference other files relative to it)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Allow user to override which python executable to use. Default to python3.
+PYTHON=${PYTHON:-python3}
+
 # Default values
 AFGHAN_MOE_URL="https://moe.gov.af/index.php/ps/%D8%AF-%D9%86%D8%B5%D8%A7%D8%A8-%DA%A9%D8%AA%D8%A7%D8%A8%D9%88%D9%86%D9%87"
 OUTPUT_DIR=${1:-"afghan_books"}
@@ -35,8 +40,16 @@ if [[ ! $REPLY =~ ^[Yy]$ ]]; then
     exit 0
 fi
 
+DOWNLOADER="$SCRIPT_DIR/download_pdf_books.py"
+
+if [[ ! -f "$DOWNLOADER" ]]; then
+    echo "Error: downloader script not found at $DOWNLOADER"
+    echo "Did you run this script from the repository root?"
+    exit 2
+fi
+
 echo "Starting download..."
-python scripts/download_pdf_books.py \
+$PYTHON "$DOWNLOADER" \
     --url "$AFGHAN_MOE_URL" \
     --output-dir "$OUTPUT_DIR" \
     --delay "$DELAY" \

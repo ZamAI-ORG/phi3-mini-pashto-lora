@@ -57,11 +57,17 @@ class PDFDownloader:
         self.output_dir = Path(output_dir)
         self.delay = delay
         self.session = requests.Session()
-        
-        # Set a user agent to identify our scraper
+        # Default headers to appear as a regular browser
         self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Educational PDF Downloader for Research Purposes)'
+            'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 '
+                          '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
         })
+        # Most requests libraries handle Accept-Encoding automatically; avoid forcing it here
+
+        # Track last fetched page URL so we can set Referer for subsequent PDF downloads
+        self.last_page_url: Optional[str] = None
         
         # Create output directory if it doesn't exist
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -88,7 +94,9 @@ class PDFDownloader:
                 response.encoding = response.apparent_encoding
             
             soup = BeautifulSoup(response.content, 'html.parser')
-            logger.info(f"Successfully parsed page content")
+            logger.info("Successfully parsed page content")
+            # remember this page as the referer for subsequent downloads
+            self.last_page_url = url
             return soup
             
         except requests.exceptions.RequestException as e:
@@ -164,66 +172,59 @@ class PDFDownloader:
     
     def download_pdf(self, url: str, filename: Optional[str] = None) -> bool:
         """
-        Download a single PDF file.
-        
-        Args:
-            url: URL of the PDF to download
-            filename: Optional custom filename
-            
-        Returns:
-            True if download successful, False otherwise
+        Download a single PDF file. Returns True on success, False on failure.
         """
+        import urllib.parse
+
+        session = getattr(self, "session", None) or requests.Session()
+        headers = {"User-Agent": "Mozilla/5.0 (compatible; PDFDownloader/1.0)"}
+        timeout = 15
+
+        # Fetch resource (single failure/return path)
         try:
-            # Generate filename if not provided
-            if filename is None:
-                parsed_url = urlparse(url)
-                filename = os.path.basename(parsed_url.path)
-                if not filename or not filename.lower().endswith('.pdf'):
-                    filename = f"book_{hash(url) % 10000}.pdf"
-            
-            filename = self.sanitize_filename(filename)
-            filepath = self.output_dir / filename
-            
-            # Skip if file already exists
-            if filepath.exists():
-                logger.info(f"File already exists, skipping: {filename}")
-                return True
-            
-            logger.info(f"Downloading: {url} -> {filename}")
-            
-            # Download with streaming to handle large files
-            response = self.session.get(url, stream=True, timeout=60)
-            response.raise_for_status()
-            
-            # Check if the response is actually a PDF
-            content_type = response.headers.get('content-type', '').lower()
-            if 'pdf' not in content_type and not filename.lower().endswith('.pdf'):
-                logger.warning(f"URL may not be a PDF file: {url} (Content-Type: {content_type})")
-            
-            # Download with progress bar
-            total_size = int(response.headers.get('content-length', 0))
-            
-            with open(filepath, 'wb') as f:
-                if total_size > 0:
-                    with tqdm(total=total_size, unit='B', unit_scale=True, desc=filename) as pbar:
-                        for chunk in response.iter_content(chunk_size=8192):
-                            if chunk:
-                                f.write(chunk)
-                                pbar.update(len(chunk))
-                else:
-                    for chunk in response.iter_content(chunk_size=8192):
-                        if chunk:
-                            f.write(chunk)
-            
-            logger.info(f"Successfully downloaded: {filename}")
-            return True
-            
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Error downloading {url}: {e}")
+            resp = session.get(url, headers=headers, stream=True, timeout=timeout)
+            resp.raise_for_status()
+        except Exception as exc:
+            logger.error("Error fetching page %s: %s", url, exc)
             return False
-        except Exception as e:
-            logger.error(f"Unexpected error downloading {url}: {e}")
+
+        # Small helpers to keep parsing logic out of the main flow
+        def _filename_from_cd(cd: Optional[str]) -> Optional[str]:
+            if not cd:
+                return None
+            m = re.search(r'filename\*?=(?:UTF-8\'\')?["\']?([^;"\']+)', cd)
+            return urllib.parse.unquote(m.group(1)) if m else None
+
+        def _filename_from_url(u: str) -> str:
+            path = urllib.parse.urlparse(u).path or ""
+            base = os.path.basename(path)
+            return base or "download.pdf"
+
+        # Resolve filename with straightforward precedence
+        candidate = filename or _filename_from_cd(resp.headers.get("content-disposition")) or _filename_from_url(url)
+        candidate = self.sanitize_filename(candidate)
+
+        out_dir = getattr(self, "output_dir", ".")
+        out_path = os.path.join(out_dir, candidate)
+
+        # Stream write with minimal branching; ensure cleanup on failure
+        try:
+            with open(out_path, "wb") as fh:
+                for chunk in resp.iter_content(chunk_size=8192):
+                    if not chunk:
+                        continue
+                    fh.write(chunk)
+        except Exception as exc:
+            logger.error("Failed to save PDF %s -> %s: %s", url, out_path, exc)
+            try:
+                if os.path.exists(out_path):
+                    os.remove(out_path)
+            except Exception:
+                pass
             return False
+
+        logger.info("Downloaded %s -> %s", url, out_path)
+        return True
     
     def download_all_pdfs(self, url: str) -> None:
         """
@@ -250,27 +251,27 @@ class PDFDownloader:
         # Download each PDF
         successful_downloads = 0
         failed_downloads = 0
-        
+
         for i, pdf_url in enumerate(pdf_links, 1):
             logger.info(f"Processing PDF {i}/{len(pdf_links)}")
-            
+
             if self.download_pdf(pdf_url):
                 successful_downloads += 1
             else:
                 failed_downloads += 1
-            
+
             # Be respectful to the server
             if i < len(pdf_links):  # Don't delay after the last download
                 time.sleep(self.delay)
-        
-        logger.info(f"Download process completed!")
+
+        logger.info("Download process completed!")
         logger.info(f"Successful downloads: {successful_downloads}")
         logger.info(f"Failed downloads: {failed_downloads}")
         logger.info(f"Files saved to: {self.output_dir.absolute()}")
 
 
-def main():
-    """Main function to run the PDF downloader."""
+def parse_args():
+    """Parse and return CLI arguments."""
     parser = argparse.ArgumentParser(
         description="Download PDF books from a webpage",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -285,52 +286,80 @@ Legal Notice:
   the website's terms of service and copyright laws.
         """
     )
-    
-    parser.add_argument(
-        '--url',
-        required=True,
-        help='URL of the webpage containing PDF links'
-    )
-    
-    parser.add_argument(
-        '--output-dir',
-        default='books',
-        help='Directory to save downloaded PDFs (default: books)'
-    )
-    
-    parser.add_argument(
-        '--delay',
-        type=float,
-        default=1.0,
-        help='Delay between downloads in seconds (default: 1.0)'
-    )
-    
-    parser.add_argument(
-        '--verbose',
-        action='store_true',
-        help='Enable verbose logging'
-    )
-    
-    args = parser.parse_args()
-    
-    # Set log level
-    if args.verbose:
-        logging.getLogger().setLevel(logging.DEBUG)
-    
-    # Validate URL
+
+    parser.add_argument('--url', required=False,
+                        help='URL of the webpage containing PDF links (use --url or provide as last positional argument)')
+    parser.add_argument('pos_url', nargs='?', help='Positional URL (alternative to --url)')
+    parser.add_argument('--output-dir', default='books', help='Directory to save downloaded PDFs (default: books)')
+    parser.add_argument('--delay', type=float, default=1.0, help='Delay between downloads in seconds (default: 1.0)')
+    parser.add_argument('--verbose', action='store_true', help='Enable verbose logging')
+    parser.add_argument('--user-agent', default=None, help='Custom User-Agent string to use (overrides default)')
+    parser.add_argument('--dry-run', action='store_true', help='Only fetch the page and list found PDF links without downloading')
+
+    return parser.parse_args()
+
+
+def validate_url(url: str) -> None:
+    """Validate the provided URL or exit the program with error."""
     try:
-        parsed = urlparse(args.url)
+        parsed = urlparse(url)
         if not all([parsed.scheme, parsed.netloc]):
             raise ValueError("Invalid URL format")
     except Exception as e:
-        logger.error(f"Invalid URL: {args.url} - {e}")
+        logger.error(f"Invalid URL: {url} - {e}")
         sys.exit(1)
-    
-    # Create downloader and start downloading
+
+
+def run_dry_run(downloader: PDFDownloader, url: str) -> None:
+    """Perform dry-run: fetch page and print found PDF links, then exit."""
+    soup = downloader.get_page_content(url)
+    if soup is None:
+        logger.error("Failed to fetch webpage content. Exiting.")
+        sys.exit(1)
+    pdf_links = downloader.find_pdf_links(soup, url)
+    if not pdf_links:
+        logger.info("No PDF links found on the webpage.")
+    else:
+        logger.info(f"Found {len(pdf_links)} PDF links (dry-run). Listing up to 50:")
+        for i, link in enumerate(pdf_links[:50], 1):
+            print(f"{i}. {link}")
+    sys.exit(0)
+
+
+def run_download(downloader: PDFDownloader, url: str) -> None:
+    """Run the actual download process."""
+    downloader.download_all_pdfs(url)
+
+
+def main():
+    """Main function to run the PDF downloader (refactored)."""
+    args = parse_args()
+
+    # Set log level early if requested
+    if args.verbose:
+        logging.getLogger().setLevel(logging.DEBUG)
+
+    # If URL was provided positionally, use it as a fallback for --url
+    if not getattr(args, 'url', None) and getattr(args, 'pos_url', None):
+        args.url = args.pos_url
+
+    # Validate URL
+    if not getattr(args, 'url', None):
+        logger.error("No URL provided. Use --url or provide the URL as the last positional argument.")
+        sys.exit(1)
+    validate_url(args.url)
+
+    # Create downloader and apply options
     downloader = PDFDownloader(output_dir=args.output_dir, delay=args.delay)
-    
+    if args.user_agent:
+        downloader.session.headers['User-Agent'] = args.user_agent
+
+    # Execute chosen mode with minimal control flow in main
     try:
-        downloader.download_all_pdfs(args.url)
+        if args.dry_run:
+            run_dry_run(downloader, args.url)
+        else:
+            run_download(downloader, args.url)
     except KeyboardInterrupt:
         logger.info("Download interrupted by user")
         sys.exit(1)
