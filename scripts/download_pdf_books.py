@@ -27,17 +27,12 @@ from urllib.parse import urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
-from tqdm import tqdm
-
 
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('pdf_download.log'),
-        logging.StreamHandler(sys.stdout)
-    ]
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[logging.FileHandler("pdf_download.log"), logging.StreamHandler(sys.stdout)],
 )
 
 logger = logging.getLogger(__name__)
@@ -45,11 +40,11 @@ logger = logging.getLogger(__name__)
 
 class PDFDownloader:
     """A class to download PDF files from a webpage."""
-    
+
     def __init__(self, output_dir: str = "books", delay: float = 1.0):
         """
         Initialize the PDF downloader.
-        
+
         Args:
             output_dir: Directory to save downloaded PDFs
             delay: Delay between requests to be respectful to the server
@@ -58,29 +53,31 @@ class PDFDownloader:
         self.delay = delay
         self.session = requests.Session()
         # Default headers to appear as a regular browser
-        self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 '
-                          '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.9',
-        })
+        self.session.headers.update(
+            {
+                "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.9",
+            }
+        )
         # Most requests libraries handle Accept-Encoding automatically; avoid forcing it here
 
         # Track last fetched page URL so we can set Referer for subsequent PDF downloads
         self.last_page_url: Optional[str] = None
-        
+
         # Create output directory if it doesn't exist
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        
+
         logger.info(f"Initialized PDF downloader with output directory: {self.output_dir}")
-    
+
     def get_page_content(self, url: str) -> Optional[BeautifulSoup]:
         """
         Fetch and parse the content of a webpage.
-        
+
         Args:
             url: The URL to fetch
-            
+
         Returns:
             BeautifulSoup object of the parsed page or None if failed
         """
@@ -88,55 +85,55 @@ class PDFDownloader:
             logger.info(f"Fetching page content from: {url}")
             response = self.session.get(url, timeout=30)
             response.raise_for_status()
-            
+
             # Try to detect encoding
-            if response.encoding == 'ISO-8859-1':
+            if response.encoding == "ISO-8859-1":
                 response.encoding = response.apparent_encoding
-            
-            soup = BeautifulSoup(response.content, 'html.parser')
+
+            soup = BeautifulSoup(response.content, "html.parser")
             logger.info("Successfully parsed page content")
             # remember this page as the referer for subsequent downloads
             self.last_page_url = url
             return soup
-            
+
         except requests.exceptions.RequestException as e:
             logger.error(f"Error fetching page {url}: {e}")
             return None
         except Exception as e:
             logger.error(f"Unexpected error parsing page {url}: {e}")
             return None
-    
+
     def find_pdf_links(self, soup: BeautifulSoup, base_url: str) -> List[str]:
         """
         Find all PDF links on a webpage.
-        
+
         Args:
             soup: BeautifulSoup object of the parsed page
             base_url: Base URL for resolving relative links
-            
+
         Returns:
             List of PDF URLs
         """
         pdf_links = []
-        
+
         # Find all links that could be PDFs
-        for link in soup.find_all('a', href=True):
-            href = link['href']
-            
+        for link in soup.find_all("a", href=True):
+            href = link["href"]
+
             # Check if the link points to a PDF file
-            if href.lower().endswith('.pdf') or 'pdf' in href.lower():
+            if href.lower().endswith(".pdf") or "pdf" in href.lower():
                 full_url = urljoin(base_url, href)
                 pdf_links.append(full_url)
                 logger.debug(f"Found PDF link: {full_url}")
-        
+
         # Also check for links in onclick or data attributes that might contain PDF URLs
-        for element in soup.find_all(attrs={'onclick': True}):
-            onclick = element['onclick']
+        for element in soup.find_all(attrs={"onclick": True}):
+            onclick = element["onclick"]
             pdf_matches = re.findall(r'["\']([^"\']*\.pdf[^"\']*)["\']', onclick, re.IGNORECASE)
             for match in pdf_matches:
                 full_url = urljoin(base_url, match)
                 pdf_links.append(full_url)
-        
+
         # Remove duplicates while preserving order
         seen = set()
         unique_links = []
@@ -144,32 +141,32 @@ class PDFDownloader:
             if link not in seen:
                 seen.add(link)
                 unique_links.append(link)
-        
+
         logger.info(f"Found {len(unique_links)} unique PDF links")
         return unique_links
-    
+
     def sanitize_filename(self, filename: str) -> str:
         """
         Sanitize a filename for safe filesystem usage.
-        
+
         Args:
             filename: Original filename
-            
+
         Returns:
             Sanitized filename
         """
         # Remove or replace invalid characters
-        filename = re.sub(r'[<>:"/\\|?*]', '_', filename)
-        filename = re.sub(r'\s+', '_', filename)
-        filename = filename.strip('._')
-        
+        filename = re.sub(r'[<>:"/\\|?*]', "_", filename)
+        filename = re.sub(r"\s+", "_", filename)
+        filename = filename.strip("._")
+
         # Ensure it's not too long (limit to 255 characters)
         if len(filename) > 255:
             name, ext = os.path.splitext(filename)
-            filename = name[:255 - len(ext)] + ext
-        
+            filename = name[: 255 - len(ext)] + ext
+
         return filename
-    
+
     def download_pdf(self, url: str, filename: Optional[str] = None) -> bool:
         """
         Download a single PDF file. Returns True on success, False on failure.
@@ -225,29 +222,29 @@ class PDFDownloader:
 
         logger.info("Downloaded %s -> %s", url, out_path)
         return True
-    
+
     def download_all_pdfs(self, url: str) -> None:
         """
         Download all PDF files from a webpage.
-        
+
         Args:
             url: URL of the webpage to scrape
         """
         logger.info(f"Starting PDF download process for: {url}")
-        
+
         # Get the webpage content
         soup = self.get_page_content(url)
         if soup is None:
             logger.error("Failed to fetch webpage content. Exiting.")
             return
-        
+
         # Find all PDF links
         pdf_links = self.find_pdf_links(soup, url)
-        
+
         if not pdf_links:
             logger.warning("No PDF links found on the webpage.")
             return
-        
+
         # Download each PDF
         successful_downloads = 0
         failed_downloads = 0
@@ -284,17 +281,22 @@ Legal Notice:
   This script is for educational and research purposes only.
   Ensure you have permission to download content and comply with
   the website's terms of service and copyright laws.
-        """
+        """,
     )
 
-    parser.add_argument('--url', required=False,
-                        help='URL of the webpage containing PDF links (use --url or provide as last positional argument)')
-    parser.add_argument('pos_url', nargs='?', help='Positional URL (alternative to --url)')
-    parser.add_argument('--output-dir', default='books', help='Directory to save downloaded PDFs (default: books)')
-    parser.add_argument('--delay', type=float, default=1.0, help='Delay between downloads in seconds (default: 1.0)')
-    parser.add_argument('--verbose', action='store_true', help='Enable verbose logging')
-    parser.add_argument('--user-agent', default=None, help='Custom User-Agent string to use (overrides default)')
-    parser.add_argument('--dry-run', action='store_true', help='Only fetch the page and list found PDF links without downloading')
+    parser.add_argument(
+        "--url",
+        required=False,
+        help="URL of the webpage containing PDF links (use --url or provide as last positional argument)",
+    )
+    parser.add_argument("pos_url", nargs="?", help="Positional URL (alternative to --url)")
+    parser.add_argument("--output-dir", default="books", help="Directory to save downloaded PDFs (default: books)")
+    parser.add_argument("--delay", type=float, default=1.0, help="Delay between downloads in seconds (default: 1.0)")
+    parser.add_argument("--verbose", action="store_true", help="Enable verbose logging")
+    parser.add_argument("--user-agent", default=None, help="Custom User-Agent string to use (overrides default)")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Only fetch the page and list found PDF links without downloading"
+    )
 
     return parser.parse_args()
 
@@ -340,11 +342,11 @@ def main():
         logging.getLogger().setLevel(logging.DEBUG)
 
     # If URL was provided positionally, use it as a fallback for --url
-    if not getattr(args, 'url', None) and getattr(args, 'pos_url', None):
+    if not getattr(args, "url", None) and getattr(args, "pos_url", None):
         args.url = args.pos_url
 
     # Validate URL
-    if not getattr(args, 'url', None):
+    if not getattr(args, "url", None):
         logger.error("No URL provided. Use --url or provide the URL as the last positional argument.")
         sys.exit(1)
     validate_url(args.url)
@@ -352,7 +354,7 @@ def main():
     # Create downloader and apply options
     downloader = PDFDownloader(output_dir=args.output_dir, delay=args.delay)
     if args.user_agent:
-        downloader.session.headers['User-Agent'] = args.user_agent
+        downloader.session.headers["User-Agent"] = args.user_agent
 
     # Execute chosen mode with minimal control flow in main
     try:
