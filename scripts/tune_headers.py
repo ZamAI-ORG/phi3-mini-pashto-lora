@@ -17,12 +17,14 @@ Notes:
 """
 
 from __future__ import annotations
+
 import argparse
+import hashlib
 import os
 import time
-import hashlib
 from datetime import datetime, timezone
 from typing import Dict, List
+
 import requests
 
 PRESET_UAS = {
