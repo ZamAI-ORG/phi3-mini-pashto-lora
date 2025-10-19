@@ -20,9 +20,9 @@ def update_space(space_id=None):
         if len(sys.argv) > 1:
             space_id = sys.argv[1]
         else:
-            # Default - update this to your actual Space ID
+            # Default Space ID
             username = "tasal9"
-            space_name = "ZamZeerak-Phi3-Pashto"  # Update with your actual Space name
+            space_name = "ZamAI-Phi3-Mini-Pashto-Demo"
             space_id = f"{username}/{space_name}"
     
     print(f"🔄 Updating Space: {space_id}")
