@@ -1,6 +1,6 @@
 # Copilot Instructions for ZamAI-Phi-3-Mini-Pashto
 
-**ALWAYS follow these instructions first and fallback to additional search and context gathering only if the information here is incomplete or found to be in error.**
+**ALWAYS follow these instructions first and fall back to additional search and context gathering only if the information here is incomplete or found to be in error.**
 
 ## Project Overview
 
