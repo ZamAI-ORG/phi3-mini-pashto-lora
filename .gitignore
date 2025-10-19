@@ -31,6 +31,10 @@ data/raw/
 pdf_download.log
 books/
 
+# Coverage
+.coverage
+.coverage.*
+htmlcov/
 
 #Ignore insiders AI rules
 .github/instructions/codacy.instructions.md

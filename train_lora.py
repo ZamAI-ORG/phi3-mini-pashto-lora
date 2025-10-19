@@ -58,16 +58,16 @@ def preprocess_function(examples: Dict[str, List], tokenizer, max_seq_length: in
     """Preprocess examples for training."""
     inputs = []
     targets = []
-    
+
     for i in range(len(examples["instruction"])):
         item = {k: v[i] for k, v in examples.items()}
-        
+
         # Create full prompt with instruction and expected output
         full_text = prepare_prompt(item, template)
-        
+
         inputs.append(full_text)
         targets.append(full_text)  # For causal LM, input and target are the same
-    
+
     # Tokenize
     model_inputs = tokenizer(
         inputs,
@@ -76,10 +76,10 @@ def preprocess_function(examples: Dict[str, List], tokenizer, max_seq_length: in
         padding=False,
         return_tensors=None,
     )
-    
+
     # For causal LM, labels are the same as input_ids
     model_inputs["labels"] = model_inputs["input_ids"].copy()
-    
+
     return model_inputs
 
 
@@ -88,18 +88,18 @@ def create_dataset(data_path: str, tokenizer, max_seq_length: int, template: str
     if not data_path or not os.path.exists(data_path):
         logger.warning(f"Data file not found: {data_path}")
         return None
-    
+
     logger.info(f"Loading data from: {data_path}")
-    
+
     if data_path.endswith(".jsonl"):
         data = load_jsonl(data_path)
         dataset = Dataset.from_list(data)
     else:
         # Try to load as HF dataset
         dataset = load_dataset("json", data_files=data_path, split="train")
-    
+
     logger.info(f"Dataset size: {len(dataset)}")
-    
+
     # Preprocess
     dataset = dataset.map(
         lambda examples: preprocess_function(examples, tokenizer, max_seq_length, template),
@@ -107,7 +107,7 @@ def create_dataset(data_path: str, tokenizer, max_seq_length: int, template: str
         remove_columns=dataset.column_names,
         desc="Preprocessing data",
     )
-    
+
     return dataset
 
 
@@ -119,36 +119,36 @@ def main():
     parser.add_argument("--hub_model_id", help="Hub model ID for upload")
     parser.add_argument("--hf_token", help="Hugging Face token")
     args = parser.parse_args()
-    
+
     # Load configuration
     config = load_config(args.config)
     logger.info(f"Loaded config from: {args.config}")
-    
+
     # Override config with command line args if provided
     if args.output_dir:
         config["output_dir"] = args.output_dir
-    
+
     # Set random seed
     set_seed(config.get("seed", 42))
-    
+
     # Login to HF Hub if token provided
     if args.hf_token:
         login(token=args.hf_token)
-    
+
     # Load tokenizer and model
     logger.info(f"Loading model: {config['base_model_name']}")
     tokenizer = AutoTokenizer.from_pretrained(config["base_model_name"], trust_remote_code=True)
-    
+
     # Set pad token if not present
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
-    
+
     # Load model with quantization if specified
     model_kwargs = {"torch_dtype": torch.float16, "device_map": "auto"}
-    
+
     if config.get("use_4bit", False):
         from transformers import BitsAndBytesConfig
-        
+
         bnb_config = BitsAndBytesConfig(
             load_in_4bit=True,
             bnb_4bit_quant_type="nf4",
@@ -156,9 +156,9 @@ def main():
             bnb_4bit_use_double_quant=True,
         )
         model_kwargs["quantization_config"] = bnb_config
-    
+
     model = AutoModelForCausalLM.from_pretrained(config["base_model_name"], **model_kwargs)
-    
+
     # Prepare LoRA configuration
     lora_config = LoraConfig(
         task_type=TaskType.CAUSAL_LM,
@@ -168,21 +168,21 @@ def main():
         target_modules=config.get("lora_target_modules", ["q_proj", "v_proj"]),
         bias="none",
     )
-    
+
     # Apply LoRA
     model = get_peft_model(model, lora_config)
     model.print_trainable_parameters()
-    
+
     # Load datasets
     template = config.get("prompt_template", "{instruction}\n{input}\n{output}")
     max_seq_length = config.get("max_seq_length", 2048)
-    
+
     train_dataset = create_dataset(config.get("train_file"), tokenizer, max_seq_length, template)
     eval_dataset = create_dataset(config.get("eval_file"), tokenizer, max_seq_length, template)
-    
+
     if train_dataset is None:
         raise ValueError("Training dataset is required but could not be loaded")
-    
+
     # Data collator
     data_collator = DataCollatorForSeq2Seq(
         tokenizer=tokenizer,
@@ -190,7 +190,7 @@ def main():
         padding=True,
         return_tensors="pt",
     )
-    
+
     # Training arguments
     output_dir = config.get("output_dir", "outputs/zamai-phi3-pashto")
     training_args = TrainingArguments(
@@ -216,7 +216,7 @@ def main():
         run_name="zamai-phi3-pashto-lora",
         seed=config.get("seed", 42),
     )
-    
+
     # Initialize trainer
     trainer = Trainer(
         model=model,
@@ -226,25 +226,25 @@ def main():
         data_collator=data_collator,
         tokenizer=tokenizer,
     )
-    
+
     # Train the model
     logger.info("Starting training...")
     trainer.train()
-    
+
     # Save the final model
     logger.info(f"Saving final model to: {output_dir}")
     trainer.save_model()
     tokenizer.save_pretrained(output_dir)
-    
+
     # Push to hub if requested
     if args.push_to_hub:
         if not args.hub_model_id:
             raise ValueError("--hub_model_id required when --push_to_hub is set")
-        
+
         logger.info(f"Pushing to Hub: {args.hub_model_id}")
         trainer.model.push_to_hub(args.hub_model_id)
         tokenizer.push_to_hub(args.hub_model_id)
-    
+
     logger.info("✅ Training completed successfully!")
 
 
