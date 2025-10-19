@@ -51,7 +51,7 @@ COMMON_LANGS = [
 def make_presets() -> List[Dict[str, str]]:
     """Create a list of header dicts to try."""
     presets = []
-    
+
     for ua_key, ua in PRESET_UAS.items():
         for accept in COMMON_ACCEPTS:
             for lang in COMMON_LANGS:
@@ -100,6 +100,7 @@ def save_response(save_dir: str, tag: str, url: str, headers: Dict[str, str], re
 def get_referer(url: str):
     try:
         from urllib.parse import urlparse
+
         p = urlparse(url)
         if p.scheme and p.netloc:
             return f"{p.scheme}://{p.netloc}/"
@@ -123,8 +124,7 @@ def try_request(session: requests.Session, url: str, headers: Dict[str, str], ti
         return None, e
 
 
-def handle_response(index: int, resp: requests.Response, req_headers: Dict[str, str],
-                    args, url: str, tag: str) -> bool:
+def handle_response(index: int, resp: requests.Response, req_headers: Dict[str, str], args, url: str, tag: str) -> bool:
     """Process and save the response. Return True if caller should stop (stop-on-success)."""
     status = resp.status_code
     print(f"[{index}] Status: {status} (UA: {req_headers.get('User-Agent')})")
@@ -134,7 +134,7 @@ def handle_response(index: int, resp: requests.Response, req_headers: Dict[str, 
         for k in ("Server", "Set-Cookie", "Content-Type", "Content-Length"):
             if k in resp.headers:
                 print(f"  {k}: {resp.headers.get(k)}")
-        preview = resp.text[:800].replace('\n', ' ') if resp.text else ''
+        preview = resp.text[:800].replace("\n", " ") if resp.text else ""
         print("Preview:", preview[:400])
 
     saved = save_response(args.save_dir, tag, url, req_headers, resp)
