@@ -1,167 +1,318 @@
-# ZamAI Phi-3 Mini Pashto Repository
+# Copilot Instructions for ZamAI-Phi-3-Mini-Pashto
 
-**ALWAYS reference these instructions first and fallback to search or bash commands only when you encounter unexpected information that does not match the info here.**
+**ALWAYS follow these instructions first and fall back to additional search and context gathering only if the information here is incomplete or found to be in error.**
 
-This is a Pashto-focused instruction-tuned variant repository for Microsoft's Phi-3-mini-4k-instruct model. The repository is currently in a **template/planning state** - it contains configuration files and documentation but most implementation files are not yet present.
+## Project Overview
+
+ZamAI Phi-3 Mini Pashto is a Pashto-focused instruction-tuned variant of microsoft/Phi-3-mini-4k-instruct. This repository contains:
+- Evaluation utilities for BLEU/chrF metrics
+- Safety filtering functionality  
+- Gradio demo interface
+- PDF book downloading tools
+- Pre-commit hooks and CI/CD setup
+- Testing infrastructure
+
+**Important**: Some features mentioned in README.md are planned but not yet implemented (train_lora.py, inference.py, evaluate.py in root).
 
 ## Working Effectively
 
-### Environment Setup (VALIDATED - WORKS)
+### Initial Setup
+Run these commands in order for a fresh repository setup:
+
 ```bash
-# Install Python dependencies - takes 2-3 minutes. NEVER CANCEL - set timeout to 10+ minutes
-pip install -r requirements.txt
+# Install dependencies - NEVER CANCEL: Takes ~5 minutes
+pip install -r requirements-dev.txt  # Set timeout to 10+ minutes
+
+# Install pre-commit hooks
+pre-commit install
+
+# Set Python path for imports to work correctly
+export PYTHONPATH=.
 ```
 
-**TIMING:** Package installation takes 2-3 minutes for ~50 packages including PyTorch, Transformers, PEFT, etc.
-
-### Test Environment Validation (ALWAYS RUN FIRST)
+### Testing
 ```bash
-# Test all major libraries load correctly - takes ~4 seconds
-python -c "
-import time
-start = time.time()
-import torch, transformers, accelerate, peft, datasets
-print(f'All libraries imported in {time.time()-start:.2f} seconds')
-print('PyTorch version:', torch.__version__)
-print('Transformers version:', transformers.__version__)
-"
+# Run tests - Takes ~1 second, set timeout to 30+ seconds for safety
+python -m pytest tests/ -v
+
+# Run tests with coverage - Takes ~1 second, set timeout to 30+ seconds  
+python -m pytest tests/ -v --cov=evaluation --cov=safety --cov-report=term-missing
 ```
 
-### Configuration Validation (VALIDATED - WORKS)
+### Linting and Code Quality
 ```bash
-# Test YAML config loading
-python -c "import yaml; config = yaml.safe_load(open('finetune_config.yaml')); print('Config loaded:', config['base_model_name'])"
+# Check code style - Takes ~0.01 seconds, set timeout to 30+ seconds
+ruff check .
+
+# Check code formatting - Takes ~0.01 seconds, set timeout to 30+ seconds  
+ruff format --check .
+
+# Fix linting issues automatically
+ruff check --fix .
+ruff format .
 ```
 
-## Current Repository State
+**CRITICAL**: ALWAYS run linting before committing or CI will fail.
 
-### What EXISTS and WORKS:
-- `requirements.txt` - **FULLY FUNCTIONAL** (PyTorch 2.8.0, Transformers 4.55.4, PEFT 0.17.1)
-- `finetune_config.yaml` - **VALID YAML** configuration for LoRA fine-tuning
-- `scripts/run_finetune.sh` - **SYNTACTICALLY CORRECT** but references missing `train_lora.py`
-- `Dockerfile` - **VALID** but requires large base image (>3GB download)
-- `data/` directory - **EXISTS** but only contains `.gitkeep`
-
-### What is MISSING (referenced in README but not implemented):
-- **ALL Python implementation files:** `train_lora.py`, `inference.py`, `evaluate.py`
-- **ALL subdirectories:** `evaluation/`, `deepspeed/`, `safety/`, `hf_space/`, `tests/`
-- **Development configs:** `requirements-dev.txt`, `pyproject.toml`, `.pre-commit-config.yaml`
-- **GitHub workflows:** `.github/workflows/`
-
-## Docker (PARTIALLY VALIDATED)
-
-### Docker Build - **DO NOT ATTEMPT**
+### Running Evaluation Scripts
 ```bash
-# Docker build FAILS due to disk space requirements (needs >8GB free space)
-# Base image pytorch/pytorch:2.3.0-cuda12.1-cudnn8-devel is >3GB
-# Expected error: "no space left on device"
+# IMPORTANT: Always set PYTHONPATH=. for scripts to work
+export PYTHONPATH=.
+
+# Test evaluation metrics
+python -c "from evaluation.metrics import compute_bleu, compute_chrf; print('Metrics work')"
+
+# Run translation evaluation (requires model and data)
+python evaluation/run_eval_translation.py \
+  --model_id tasal9/ZamAI-Phi-3-Mini-Pashto \
+  --file data/pashto_instruct_valid.jsonl \
+  --field output \
+  --reference_field output \
+  --source_field instruction
+
+# Test quantization comparison
+python scripts/compare_quantization.py --help
 ```
 
-**NEVER attempt Docker builds in this environment - they require >8GB free disk space.**
-
-## Model and Data Access
-
-### Model Loading Limitations
+### Running the Gradio Demo
 ```bash
-# Model download FAILS in this environment (no internet access to HuggingFace Hub)
-# Expected error: "We couldn't connect to 'https://huggingface.co'"
+# Test imports work (requires no model download)
+python -c "import sys; sys.path.append('.'); import hf_space.app; print('Gradio imports work')"
+
+# Run the demo (requires model download - will take significant time)
+cd hf_space && python app.py
 ```
 
-**CRITICAL:** This environment cannot download models from HuggingFace Hub. Any scripts requiring model downloads will fail.
-
-## Testing and Validation
-
-### What to Test After Changes
-1. **Always run environment validation first** (library imports test above)
-2. **Test YAML configuration loading** if modifying config files
-3. **Validate any new Python syntax** with `python -m py_compile <file>`
-4. **Never attempt to run missing scripts** like `train_lora.py`, `inference.py`, etc.
-
-### Pre-commit and Linting
+### Safety Filtering
 ```bash
-# Pre-commit is NOT configured (missing .pre-commit-config.yaml)
-# Manual linting options:
-python -m flake8 <file>      # If implementing Python files
-python -m black <file>       # If implementing Python files  
+# Test safety filter
+export PYTHONPATH=.
+python -c "from safety.filter import SafetyFilter; sf = SafetyFilter(); print('Safety filter works')"
 ```
 
-## Scripts and Commands
+## Manual Validation Scenarios
 
-### scripts/run_finetune.sh
+### After Making Code Changes
+Always run these complete validation scenarios to ensure changes work correctly:
+
+1. **Full Development Cycle Test**:
+   ```bash
+   # Set up environment
+   export PYTHONPATH=.
+   
+   # Test linting (CRITICAL - CI will fail if this fails)
+   ruff check . && ruff format --check .
+   
+   # Test core functionality
+   python -c "from evaluation.metrics import compute_bleu; from safety.filter import SafetyFilter; print('Core imports work')"
+   
+   # Run test suite
+   python -m pytest tests/ -v --cov=evaluation --cov=safety
+   
+   # Test evaluation functionality
+   python -c "
+   from evaluation.metrics import compute_bleu, compute_chrf
+   preds = ['hello world']
+   refs = ['hello world'] 
+   bleu = compute_bleu(preds, refs)
+   chrf = compute_chrf(preds, refs)
+   print(f'BLEU: {bleu[\"bleu\"]:.1f}, chrF: {chrf[\"chrf\"]:.1f}')
+   print('Evaluation metrics working correctly')
+   "
+   
+   echo "All validations passed - ready to commit"
+   ```
+
+2. **Safety Filter Validation**:
+   ```bash
+   export PYTHONPATH=.
+   python -c "
+   from safety.filter import SafetyFilter
+   sf = SafetyFilter()
+   safe_text = 'Hello, how are you?'
+   unsafe_text = 'violence and harm'
+   print('Safe text:', sf.check_text(safe_text))
+   print('Unsafe text:', sf.check_text(unsafe_text))
+   print('Safety filter working correctly')
+   "
+   ```
+
+3. **Script Functionality Check**:
+   ```bash
+   # Test help outputs work
+   PYTHONPATH=. python evaluation/run_eval_translation.py --help
+   PYTHONPATH=. python scripts/compare_quantization.py --help
+   python scripts/download_pdf_books.py --help
+   echo "All script help commands work"
+   ```
+
+1. **Core Functionality Test**:
+   ```bash
+   export PYTHONPATH=.
+   python -c "from evaluation.metrics import compute_bleu; from safety.filter import SafetyFilter; print('Core imports work')"
+   ```
+
+2. **Linting Validation** (CRITICAL for CI):
+   ```bash
+   ruff check . && ruff format --check . && echo "Linting passed"
+   ```
+
+3. **Test Suite Validation**:
+   ```bash
+   python -m pytest tests/ -v --cov=evaluation --cov=safety
+   ```
+
+4. **Import Path Validation**:
+   ```bash
+   PYTHONPATH=. python evaluation/run_eval_translation.py --help
+   PYTHONPATH=. python scripts/compare_quantization.py --help
+   ```
+
+5. **Functional Evaluation Test**:
+   ```bash
+   export PYTHONPATH=.
+   python -c "
+   from evaluation.metrics import compute_bleu, compute_chrf
+   preds = ['hello world']
+   refs = ['hello world'] 
+   bleu = compute_bleu(preds, refs)
+   chrf = compute_chrf(preds, refs)
+   print(f'BLEU: {bleu[\"bleu\"]:.1f}, chrF: {chrf[\"chrf\"]:.1f}')
+   print('Evaluation metrics working correctly')
+   "
+   ```
+
+## Timeout and Timing Guidelines
+
+**NEVER CANCEL these operations - Wait for completion:**
+
+- `pip install -r requirements-dev.txt`: Takes ~5 minutes, set timeout to 10+ minutes
+- Model downloads/fine-tuning: Can take 30+ minutes, set timeout to 60+ minutes
+- Large data processing: Can take 15+ minutes, set timeout to 30+ minutes
+
+**Quick operations (but use safe timeouts):**
+- Tests: ~1 second, set timeout to 30+ seconds  
+- Linting: ~0.01 seconds, set timeout to 30+ seconds
+- Script help/imports: ~1 second, set timeout to 30+ seconds
+
+**Measured Timing Reference** (from validation):
+- `python -m pytest tests/ -v`: 0.7 seconds
+- `ruff check .`: 0.01 seconds  
+- `ruff format --check .`: 0.01 seconds
+- `pip install -r requirements-dev.txt`: ~300 seconds (5 minutes)
+- Core imports (`python -c "from evaluation.metrics import ..."`): 0.1 seconds
+- Full validation cycle: ~1 second (excluding pip install)
+
+## Critical Requirements
+
+### Before Committing
+ALWAYS run these commands before committing (CI will fail otherwise):
 ```bash
-# This script FAILS - references missing train_lora.py
-# Expected error: "can't open file 'train_lora.py': No such file or directory"
+ruff check . && ruff format --check .
+python -m pytest tests/ -v
 ```
 
-**Do not run this script** - it requires implementing `train_lora.py` first.
+### Python Path Setup
+Most scripts require `PYTHONPATH=.` to work correctly:
+```bash
+export PYTHONPATH=.
+# OR prefix commands with: PYTHONPATH=. python script.py
+```
+
+### Working vs Planned Features
+**Working features:**
+- Evaluation metrics (evaluation/metrics.py)
+- Safety filtering (safety/filter.py)  
+- Gradio demo (hf_space/app.py)
+- PDF downloaders (scripts/download_*.py)
+- Testing infrastructure (tests/)
+- Linting with ruff
+
+**Planned but not implemented:**
+- train_lora.py (mentioned in README but doesn't exist)
+- inference.py (mentioned in README but doesn't exist)  
+- evaluate.py (mentioned in README but doesn't exist)
+
+## Repository Structure
+
+```
+.
+├── README.md
+├── requirements.txt          # Main dependencies
+├── requirements-dev.txt      # Development dependencies  
+├── pyproject.toml           # Project configuration
+├── .pre-commit-config.yaml  # Pre-commit hooks
+├── .github/
+│   └── workflows/
+│       └── tests.yml        # CI pipeline
+├── evaluation/
+│   ├── metrics.py           # BLEU/chrF utilities
+│   ├── run_eval_translation.py
+│   └── run_eval_instruction.py
+├── safety/
+│   └── filter.py            # Content safety filtering
+├── hf_space/
+│   ├── app.py              # Gradio demo interface
+│   └── requirements.txt
+├── scripts/
+│   ├── compare_quantization.py
+│   ├── download_pdf_books.py
+│   ├── download_afghan_books.sh
+│   └── tune_headers.py
+├── tests/
+│   ├── test_clean_pashto.py
+│   └── test_prompt_template.py
+├── data/                    # Empty with .gitkeep
+└── deepspeed/
+    └── ds_config_zero2.json
+```
+
+## Common Troubleshooting
+
+1. **Import Errors**: Always use `export PYTHONPATH=.` or `PYTHONPATH=. python script.py`
+2. **CI Failures**: Run linting first: `ruff check . && ruff format --check .`
+3. **Test Failures**: Ensure dependencies installed: `pip install -r requirements-dev.txt`
+4. **Pre-commit Issues**: Use ruff directly instead of pre-commit hooks if network issues
+5. **Model Errors**: Most evaluation scripts require actual models - use test imports first
+
+## Critical Warnings and Known Issues
+
+### DO NOT Do These Things:
+- **NEVER** try to run scripts without `export PYTHONPATH=.` - imports will fail
+- **NEVER** commit without running linting first - CI will fail
+- **NEVER** assume train_lora.py, inference.py, evaluate.py exist in root - they don't yet
+- **NEVER** cancel pip install operations - they take 5+ minutes and are critical
+- **NEVER** run pre-commit hooks without stable internet - use ruff directly instead
+
+### Network and Timing Issues:
+- Pre-commit hook installation may timeout due to network issues - this is expected
+- Use `ruff check .` and `ruff format .` directly instead of pre-commit hooks
+- PDF downloader scripts (e.g., `scripts/download_pdf_books.py`) run non-interactively and can be used unattended or in automation workflows
+- Model-based operations can take 30+ minutes - always set generous timeouts
+
+### Missing Features (Do NOT try to use):
+The following are mentioned in README.md but not implemented:
+- `train_lora.py` (root level) - doesn't exist
+- `inference.py` (root level) - doesn't exist  
+- `evaluate.py` (root level) - doesn't exist
+- Use `evaluation/run_eval_*.py` scripts instead for evaluation tasks
 
 ## Development Workflow
 
-### When Adding New Features:
-1. **Start with configuration files** (modify `finetune_config.yaml` if needed)
-2. **Implement Python files** referenced in existing scripts
-3. **Test each component in isolation** before integration
-4. **Always validate imports work** after adding new dependencies
+1. Make changes to code
+2. ALWAYS set `export PYTHONPATH=.`
+3. Test imports: `python -c "from module import function"`
+4. Run linting: `ruff check . && ruff format --check .`
+5. Run tests: `python -m pytest tests/ -v`
+6. Validate specific functionality with test scenarios
+7. Commit changes
 
-### Key Implementation Priority Order:
-1. `train_lora.py` - Core training script referenced by `run_finetune.sh`
-2. `inference.py` - For model inference testing
-3. `evaluate.py` - For model evaluation
-4. Missing directory structures (`evaluation/`, `tests/`, etc.)
+## File Locations Reference
 
-## Repository Structure Reference
-
-### Working Files (verified present):
-```
-.
-├── requirements.txt          # WORKS - installs successfully
-├── finetune_config.yaml     # WORKS - valid YAML configuration
-├── Dockerfile               # VALID - but requires >8GB disk space
-├── scripts/
-│   └── run_finetune.sh      # VALID syntax - but requires train_lora.py
-├── data/
-│   └── .gitkeep            # EXISTS - placeholder only
-├── README.md               # EXISTS - describes planned features
-└── LICENSE                 # EXISTS - MIT license
-```
-
-### Missing Implementation (from README but not present):
-```
-├── train_lora.py           # MISSING - main training script
-├── inference.py            # MISSING - inference script  
-├── evaluate.py             # MISSING - evaluation script
-├── requirements-dev.txt    # MISSING - development dependencies
-├── pyproject.toml          # MISSING - project configuration
-├── evaluation/             # MISSING - evaluation utilities
-├── deepspeed/              # MISSING - DeepSpeed configurations
-├── accelerate_config.yaml  # MISSING - Accelerate configuration
-├── safety/                 # MISSING - content filtering
-├── hf_space/              # MISSING - Gradio Space app
-├── tests/                 # MISSING - unit tests
-├── .pre-commit-config.yaml # MISSING - pre-commit hooks
-└── .github/               # MISSING - GitHub workflows
-```
-
-## Timing and Performance Notes
-
-- **Environment setup:** 2-3 minutes for pip install
-- **Library imports:** ~4 seconds for all major ML libraries  
-- **YAML config loading:** <1 second
-- **Docker build:** FAILS - requires >8GB free space, would take 10+ minutes if successful
-
-## Critical Warnings
-
-- **NEVER CANCEL pip install** - Set timeout to 10+ minutes minimum
-- **DO NOT attempt Docker builds** - Will fail due to disk space constraints
-- **DO NOT run scripts referencing missing .py files** - They will fail immediately
-- **Model downloads WILL FAIL** - No internet access to HuggingFace Hub in this environment
-
-## When Instructions Are Incomplete
-
-If these instructions don't cover your specific task:
-1. **First check** if required implementation files exist using `ls -la <filename>`
-2. **Test basic Python syntax** with `python -c "import <module>"`
-3. **Search the repository** for related configuration or example files
-4. **Only then** explore with additional bash commands or searches
-
-This repository is a **template/planning state** - expect to implement most functionality from scratch based on the configuration files and README specifications.
+- **Core evaluation**: `evaluation/metrics.py`
+- **Safety filtering**: `safety/filter.py`
+- **Main demo**: `hf_space/app.py`
+- **Test files**: `tests/test_*.py`
+- **CI configuration**: `.github/workflows/tests.yml`
+- **Linting config**: `pyproject.toml` (ruff section)
+- **Dependencies**: `requirements.txt`, `requirements-dev.txt`
