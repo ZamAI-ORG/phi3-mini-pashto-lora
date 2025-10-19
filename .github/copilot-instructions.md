@@ -287,7 +287,7 @@ export PYTHONPATH=.
 ### Network and Timing Issues:
 - Pre-commit hook installation may timeout due to network issues - this is expected
 - Use `ruff check .` and `ruff format .` directly instead of pre-commit hooks
-- PDF downloader scripts require interactive confirmation - not suitable for automation
+- PDF downloader scripts (e.g., `scripts/download_pdf_books.py`) run non-interactively and can be used unattended or in automation workflows
 - Model-based operations can take 30+ minutes - always set generous timeouts
 
 ### Missing Features (Do NOT try to use):
