@@ -167,57 +167,79 @@ class PDFDownloader:
 
         return filename
 
-    def download_pdf(self, url: str, filename: Optional[str] = None) -> bool:
-        """
-        Download a single PDF file. Returns True on success, False on failure.
-        """
-        import urllib.parse
-
-        session = getattr(self, "session", None) or requests.Session()
-        headers = {"User-Agent": "Mozilla/5.0 (compatible; PDFDownloader/1.0)"}
-        timeout = 15
-
-        # Fetch resource (single failure/return path)
+    def _fetch_response(self, url: str, headers: dict, timeout: int) -> Optional[requests.Response]:
+        """Fetch a URL and return the Response or None on error (logs errors)."""
         try:
-            resp = session.get(url, headers=headers, stream=True, timeout=timeout)
+            resp = self.session.get(url, headers=headers, stream=True, timeout=timeout)
             resp.raise_for_status()
+            return resp
         except Exception as exc:
             logger.error("Error fetching page %s: %s", url, exc)
-            return False
+            return None
 
-        # Small helpers to keep parsing logic out of the main flow
-        def _filename_from_cd(cd: Optional[str]) -> Optional[str]:
-            if not cd:
-                return None
-            m = re.search(r'filename\*?=(?:UTF-8\'\')?["\']?([^;"\']+)', cd)
-            return urllib.parse.unquote(m.group(1)) if m else None
+    def _extract_filename_from_cd(self, cd: Optional[str]) -> Optional[str]:
+        """Extract filename from Content-Disposition header if present."""
+        if not cd:
+            return None
+        import urllib.parse as _urlparse
 
-        def _filename_from_url(u: str) -> str:
-            path = urllib.parse.urlparse(u).path or ""
-            base = os.path.basename(path)
-            return base or "download.pdf"
+        m = re.search(r'filename\*?=(?:UTF-8\'\')?["\']?([^;"\']+)', cd)
+        return _urlparse.unquote(m.group(1)) if m else None
 
-        # Resolve filename with straightforward precedence
-        candidate = filename or _filename_from_cd(resp.headers.get("content-disposition")) or _filename_from_url(url)
-        candidate = self.sanitize_filename(candidate)
+    def _filename_from_url(self, u: str) -> str:
+        """Derive a filename from the URL path."""
+        import urllib.parse as _urlparse
 
-        out_dir = getattr(self, "output_dir", ".")
-        out_path = os.path.join(out_dir, candidate)
+        path = _urlparse.urlparse(u).path or ""
+        base = os.path.basename(path)
+        return base or "download.pdf"
 
-        # Stream write with minimal branching; ensure cleanup on failure
+    def _resolve_filename(self, resp: requests.Response, url: str, provided: Optional[str]) -> str:
+        """Decide the filename to use, sanitize it and return."""
+        cd = resp.headers.get("content-disposition")
+        candidate = provided or self._extract_filename_from_cd(cd) or self._filename_from_url(url)
+        return self.sanitize_filename(candidate)
+
+    def _save_stream_to_file(self, resp: requests.Response, out_path: str) -> bool:
+        """Stream write response content to out_path, remove partial file on failure."""
         try:
             with open(out_path, "wb") as fh:
                 for chunk in resp.iter_content(chunk_size=8192):
                     if not chunk:
                         continue
                     fh.write(chunk)
+            return True
         except Exception as exc:
-            logger.error("Failed to save PDF %s -> %s: %s", url, out_path, exc)
+            logger.error(
+                "Failed to save PDF %s -> %s: %s", resp.url if hasattr(resp, "url") else "<url>", out_path, exc
+            )
             try:
                 if os.path.exists(out_path):
                     os.remove(out_path)
             except Exception:
                 pass
+            return False
+
+    def download_pdf(self, url: str, filename: Optional[str] = None) -> bool:
+        """
+        Download a single PDF file. Returns True on success, False on failure.
+        Refactored to use small helpers for readability and lower cognitive complexity.
+        """
+        headers = {"User-Agent": "Mozilla/5.0 (compatible; PDFDownloader/1.0)"}
+        timeout = 15
+
+        # Fetch resource and return early on failure
+        resp = self._fetch_response(url, headers, timeout)
+        if resp is None:
+            return False
+
+        # Resolve filename and target path
+        candidate = self._resolve_filename(resp, url, filename)
+        out_dir = getattr(self, "output_dir", ".")
+        out_path = os.path.join(out_dir, candidate)
+
+        # Save stream to file (handles cleanup on failure)
+        if not self._save_stream_to_file(resp, out_path):
             return False
 
         logger.info("Downloaded %s -> %s", url, out_path)
