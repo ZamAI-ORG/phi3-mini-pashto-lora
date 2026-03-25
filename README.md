@@ -1,3 +1,11 @@
+# Phi-3 Mini Pashto (LoRA)
+
+Pashto instruction-tuned LoRA adaptation of `microsoft/Phi-3-mini-4k-instruct` developed in ZamAI Labs.
+
+- Website: https://zamai.dev
+- Labs: https://github.com/ZamAI-ORG
+
+
 # ZamAI Phi-3 Mini Pashto
 
 ZamAI Phi-3 Mini Pashto is a Pashto–focused instruction-tuned variant of the base model `microsoft/Phi-3-mini-4k-instruct`.
